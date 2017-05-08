@@ -8,9 +8,19 @@
 #include <algorithm>
 #include <cstdint>
 #include <iomanip>
+#include <cstring>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <unistd.h>
+#include <netdb.h>
+#include <arpa/inet.h>
+#include <signal.h>
+#include <errno.h>
+#include <vector>
+
 
 time_t strtotime_t(std::string const &str) {   
-  std::tm date;
+  std::tm date = {};
   std::istringstream range(str);
   range >> std::get_time(&date, "%Y-%m-%d %H:%M:%S");
   return std::mktime(&date);
@@ -26,6 +36,12 @@ time_t max_year() {
   return date;
 }
 
+std::string const addr_humanreadable(struct sockaddr_in *ipv4) {
+  char ipcstr[INET_ADDRSTRLEN];
+  inet_ntop(AF_INET, &(ipv4->sin_addr), ipcstr, INET_ADDRSTRLEN);
+  return std::string(ipcstr) + ":" + std::to_string(ntohs(ipv4->sin_port));
+}
+
 class Message {
   private:
     time_t timestamp;
@@ -38,7 +54,7 @@ class Message {
     static std::string s_buffer;
 
   public:
-    static size_t const MAX_ENTRAILS_SIZE = 65535;
+    static size_t const MAX_ENTRAILS_SIZE = 65536;
     
     // For client creating the message
     Message(std::string const &timestamp, char c) : c(c) {
@@ -54,7 +70,7 @@ class Message {
     // Decode message sent on the net
     Message(std::string const &serialized) {
       if (serialized.length() > MAX_ENTRAILS_SIZE || serialized.length() < 9) {
-        error = false;
+        error = true;
         return;
       }
       this->c = serialized[8];
@@ -88,6 +104,10 @@ class Message {
       return s_buffer.c_str();
     }
 
+    size_t const ssize() const { 
+      return s_buffer.length();
+    }
+
     static uint64_t bswap(uint64_t number) {
       uint64_t const every2b = UINT64_C(0xFF00FF00FF00FF00);
       uint64_t const every2bo = UINT64_C(0xFF00FF00FF00FF);
@@ -104,7 +124,7 @@ class Message {
       return !(*reinterpret_cast<char const*>(&guinea_pig));
     }
     
-    static void initialize_serialization_buffer(std::string const &file_content) {
+    static void initialize_serializer(std::string const &file_content) {
       s_buffer = std::string(9, ' ') + file_content;
     }
 
@@ -114,10 +134,11 @@ class Message {
 
 std::ostream& operator<<(std::ostream &os, Message const &ms) {
   if (ms.is_correct()) {
-    os << ms.decimal_timestamp << " " << ms.c << " " << ms.file_viscera << std::endl;
+    os << ms.decimal_timestamp << " " << ms.c << " " << ms.file_viscera;
   }
   return os;
 }
 
+std::string Message::s_buffer;
 
 #endif /* __BOILERPLATE__ */
